@@ -1,0 +1,1 @@
+// Money Management - Fixed Size used
