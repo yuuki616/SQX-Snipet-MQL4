@@ -1,5 +1,3 @@
-Understood. I will research how to construct a proper Agent\_mq5.md guide for exporting Money Management snippets from StrategyQuant to MQL5 via Freemarker templates. Please wait a moment.
-
 
 # Building Freemarker Templates for Custom MQL5 Money Management Snippets in SQX
 
