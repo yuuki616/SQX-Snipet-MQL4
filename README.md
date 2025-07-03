@@ -1,0 +1,1 @@
+# SQX-Snipet-MQL5
