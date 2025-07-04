@@ -1,0 +1,13 @@
+input string smm = "----------- Money Management - Dampened Labouchere FX MM -----------";
+input bool UseMoneyManagement = true;
+input double mmF_NORMAL = <@printMMVariableNumber "#F_NORMAL#" />;
+input double mmF_DEFENCE = <@printMMVariableNumber "#F_DEFENCE#" />;
+input double mmSWITCH_DEBT = <@printMMVariableNumber "#SWITCH_DEBT#" />;
+input double mmSWITCH_WR = <@printMMVariableNumber "#SWITCH_WR#" />;
+input int mmSWITCH_REC = <@printMMVariableNumber "#SWITCH_REC#" />;
+input double mmMULT_STEP = <@printMMVariableNumber "#MULT_STEP#" />;
+input double mmMULT_MAX = <@printMMVariableNumber "#MULT_MAX#" />;
+input double mmMIN_LOT = <@printMMVariableNumber "#MIN_LOT#" />;
+input double mmINITIAL_LOT = <@printMMVariableNumber "#INITIAL_LOT#" />;
+input double mmMultiplier = ${orderSizeMultiplier};
+input double mmStep = ${orderSizeStep};

@@ -1,0 +1,16 @@
+<@compress_single_line>sqMMDampenedLabouchereFX(
+            <@printSymbol block />,
+            <@printOrderType block orderType directionParamName />,
+            openPrice,
+            sl,
+            mmF_NORMAL,
+            mmF_DEFENCE,
+            mmSWITCH_DEBT,
+            mmSWITCH_WR,
+            mmSWITCH_REC,
+            mmMULT_STEP,
+            mmMULT_MAX,
+            mmMIN_LOT,
+            mmINITIAL_LOT,
+            mmMultiplier,
+            mmStep)</@compress_single_line>
