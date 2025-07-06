@@ -71,14 +71,37 @@ public class DampenedLabouchereFXSnippet extends MoneyManagementMethod {
     @Help("サイクル開始時の初期ロット（ベット値の下限）")
     public double INITIAL_LOT;
 
-    private List<Double> sequence;
-    private double debt;
-    private int streak;
-    private int cycleId;
-    private Deque<Boolean> winHist;
-    private Mode mode;
+    @Parameter(name="SEPARATE_DIRECTION", defaultValue="false", category="Default")
+    @Help("true で買いと売りのロット計算を独立させます")
+    public boolean SEPARATE_DIRECTION;
+
+    @Parameter(defaultValue="0.0", name="RESET_DD", minValue=0.0d, maxValue=1000000d, step=0.1d, category="Default")
+    @Help("ドローダウンがこの金額に達したらサイクルをリセット (0 で無効)")
+    public double RESET_DD;
+
+    private static class State {
+        List<Double> sequence;
+        double debt;
+        int streak;
+        int cycleId;
+        Deque<Boolean> winHist;
+        Mode mode;
+
+        State() {
+            sequence = null;
+            debt = 0.0;
+            streak = 0;
+            cycleId = 1;
+            winHist = new ArrayDeque<>(100);
+            mode = Mode.Normal;
+        }
+    }
+
+    private State longState;
+    private State shortState;
     private int lastProcessedOrderIndex;
     private double cycleStartBalance;
+    private double cyclePeakBalance;
 
     private static final double PAYOUT = 1.0;
 
@@ -88,22 +111,17 @@ public class DampenedLabouchereFXSnippet extends MoneyManagementMethod {
      * 初期化コンストラクタ
      */
     public DampenedLabouchereFXSnippet() {
-        // parameters are injected after the constructor runs, so initialization
-        // using them must be deferred until computeTradeSize() is called
-        sequence = null;
-        debt     = 0.0;
-        streak   = 0;
-        cycleId  = 1;
-        winHist  = new ArrayDeque<>(100);
-        mode     = Mode.Normal;
+        longState = new State();
+        shortState = new State();
         lastProcessedOrderIndex = -1;
+        cyclePeakBalance = 0.0;
     }
 
     @Override
     public double computeTradeSize(StrategyBase strategy, String symbol, byte orderType,
                                   double price, double sl, double tickSize, double pointValue,
                                   double sizeStep) throws Exception {
-        if (sequence == null) {
+        if (longState.sequence == null) {
             resetCycle(strategy);
         }
 
@@ -115,35 +133,60 @@ public class DampenedLabouchereFXSnippet extends MoneyManagementMethod {
         updateStateFromHistory(strategy);
 
         double balance = strategy.getAccountBalance();
-        double lot = calculateNextLot(balance);
+        cyclePeakBalance = Math.max(cyclePeakBalance, balance);
+        if (RESET_DD > 0.0 && cyclePeakBalance - balance >= RESET_DD) {
+            resetCycle(strategy);
+            balance = strategy.getAccountBalance();
+            cyclePeakBalance = balance;
+        }
+
+        State state = getState(orderType);
+        double lot = calculateNextLot(state);
         // debug output disabled
-        // debug("MM", "NextLot=" + lot + ", Balance=" + balance + ", Debt=" + debt
-        //         + ", Streak=" + streak + ", Mode=" + mode);
+        // debug("MM", "NextLot=" + lot + ", Balance=" + balance + ", Debt=" + state.debt
+        //         + ", Streak=" + state.streak + ", Mode=" + state.mode);
         return lot;
     }
 
 
 
     public void resetCycle(StrategyBase strategy) {
-        cycleId = 1;
-        sequence = new ArrayList<>(Arrays.asList(0.0, INITIAL_LOT));
-        debt = 0.0;
-        streak = 0;
-        winHist = new ArrayDeque<>(100);
-        mode = Mode.Normal;
+        resetState(longState);
+        resetState(shortState);
         lastProcessedOrderIndex = strategy.Trader.getHistoryOrdersCount() - 1;
         cycleStartBalance = strategy.getAccountBalance();
-        // debug("MM", "ResetCycle: InitialLot=" + INITIAL_LOT + ", CycleId=" + cycleId);
+        cyclePeakBalance = cycleStartBalance;
     }
 
-    private double calculateNextLot(double balance) {
-        double betVal = round(sequence.get(0) + sequence.get(sequence.size() - 1), 2);
+    private void resetState(State s) {
+        s.sequence = new ArrayList<>(Arrays.asList(0.0, INITIAL_LOT));
+        s.debt = 0.0;
+        s.streak = 0;
+        s.cycleId = 1;
+        s.winHist = new ArrayDeque<>(100);
+        s.mode = Mode.Normal;
+    }
+
+    private double calculateNextLot(State s) {
+        double betVal = round(s.sequence.get(0) + s.sequence.get(s.sequence.size() - 1), 2);
         betVal = Math.max(betVal, INITIAL_LOT);
-        double mult = (streak < 3) ? 1.0 : Math.min(1.0 + (streak - 2) * MULT_STEP, MULT_MAX);
+        double mult = (s.streak < 3) ? 1.0 : Math.min(1.0 + (s.streak - 2) * MULT_STEP, MULT_MAX);
         double lot = Math.max(MIN_LOT, round(betVal * mult, 2));
-        // debug("MM_Calc", String.format("betVal=%.2f, mult=%.2f, lot=%.2f, debt=%.2f, streak=%d, mode=%s, seq=%s",
-        //         betVal, mult, lot, debt, streak, mode, sequence.toString()));
         return lot;
+    }
+
+    private State getState(byte orderType) {
+        if (SEPARATE_DIRECTION) {
+            return OrderTypes.isLongOrder(orderType) ? longState : shortState;
+        }
+        return longState;
+    }
+
+    private State getState(Order order) {
+        if (SEPARATE_DIRECTION) {
+            return order.isLong() ? longState : shortState;
+        }
+        return longState;
     }
 
     // ------------------------------------------------------------------
@@ -161,7 +204,8 @@ public class DampenedLabouchereFXSnippet extends MoneyManagementMethod {
             }
             double pl = getPL(order);
             boolean win = pl > 0;
-            updateState(win, Math.abs(order.Size), strategy.getAccountBalance(), strategy);
+            State s = getState(order);
+            updateState(s, win, Math.abs(order.Size), strategy.getAccountBalance(), strategy);
             lastProcessedOrderIndex = i;
         }
     }
@@ -177,84 +221,84 @@ public class DampenedLabouchereFXSnippet extends MoneyManagementMethod {
         }
     }
 
-    private void updateState(boolean win, double lot, double balance, StrategyBase strategy) {
-        double betVal = round(sequence.get(0) + sequence.get(sequence.size() - 1), 2);
+    private void updateState(State s, boolean win, double lot, double balance, StrategyBase strategy) {
+        double betVal = round(s.sequence.get(0) + s.sequence.get(s.sequence.size() - 1), 2);
         betVal = Math.max(betVal, INITIAL_LOT);
-        double mult = (streak < 3) ? 1.0 : Math.min(1.0 + (streak - 2) * MULT_STEP, MULT_MAX);
+        double mult = (s.streak < 3) ? 1.0 : Math.min(1.0 + (s.streak - 2) * MULT_STEP, MULT_MAX);
 
         if (!win) {
-            winHist.add(false);
-            if (winHist.size() > 100) winHist.pollFirst();
-            double currentF = currentF(balance);
+            s.winHist.add(false);
+            if (s.winHist.size() > 100) s.winHist.pollFirst();
+            double currentF = currentF(s, balance);
             double appendVal = Math.max(INITIAL_LOT, round(betVal * currentF, 2));
-            sequence.add(appendVal);
-            debt += lot - (appendVal * mult);
-            debt = round(debt, 2);
-            streak = 0;
+            s.sequence.add(appendVal);
+            s.debt += lot - (appendVal * mult);
+            s.debt = round(s.debt, 2);
+            s.streak = 0;
             // debug("MM", String.format(
             //         "LOSE: appendVal=%.2f, betVal=%.2f, mult=%.2f, debt=%.2f, streak=%d, mode=%s, seq=%s",
-            //         appendVal, betVal, mult, debt, streak, mode, sequence.toString()));
+            //         appendVal, betVal, mult, s.debt, s.streak, s.mode, s.sequence.toString()));
         } else {
-            winHist.add(true);
-            if (winHist.size() > 100) winHist.pollFirst();
+            s.winHist.add(true);
+            if (s.winHist.size() > 100) s.winHist.pollFirst();
             double profit = round(lot * PAYOUT, 2);
-            if (profit >= debt) {
-                profit -= debt;
-                debt = 0.0;
-                if (sequence.size() <= 2) {
-                    sequence = new ArrayList<>(Arrays.asList(0.0, INITIAL_LOT));
-                    streak = 0;
+            if (profit >= s.debt) {
+                profit -= s.debt;
+                s.debt = 0.0;
+                if (s.sequence.size() <= 2) {
+                    s.sequence = new ArrayList<>(Arrays.asList(0.0, INITIAL_LOT));
+                    s.streak = 0;
                 } else {
-                    sequence = new ArrayList<>(sequence.subList(1, sequence.size() - 1));
-                    streak++;
+                    s.sequence = new ArrayList<>(s.sequence.subList(1, s.sequence.size() - 1));
+                    s.streak++;
                 }
             } else {
-                debt -= profit;
-                debt = round(debt, 2);
-                streak++;
+                s.debt -= profit;
+                s.debt = round(s.debt, 2);
+                s.streak++;
             }
             // debug("MM", String.format(
             //         "WIN: profit=%.2f, betVal=%.2f, mult=%.2f, debt=%.2f, streak=%d, mode=%s, seq=%s",
-            //         profit, betVal, mult, debt, streak, mode, sequence.toString()));
+            //         profit, betVal, mult, s.debt, s.streak, s.mode, s.sequence.toString()));
         }
 
-        checkCycleCompletion(strategy);
+        checkCycleCompletion(strategy, s);
     }
 
     /**
      * Check if current sequence represents the start state and debt is cleared.
      * If so, consider the Labouchere cycle completed and advance cycleId.
      */
-    private void checkCycleCompletion(StrategyBase strategy) {
+    private void checkCycleCompletion(StrategyBase strategy, State s) {
         double balance = strategy.getAccountBalance();
-        if (sequence.size() == 2 &&
-            Math.abs(sequence.get(0)) < 1e-9 &&
-            Math.abs(sequence.get(1) - INITIAL_LOT) < 1e-9 &&
-            Math.abs(debt) < 1e-9 &&
+        if (s.sequence.size() == 2 &&
+            Math.abs(s.sequence.get(0)) < 1e-9 &&
+            Math.abs(s.sequence.get(1) - INITIAL_LOT) < 1e-9 &&
+            Math.abs(s.debt) < 1e-9 &&
             balance >= cycleStartBalance) {
-            onCycleComplete(strategy);
+            onCycleComplete(strategy, s);
         }
     }
 
-    private void onCycleComplete(StrategyBase strategy) {
-        cycleId++;
-        sequence = new ArrayList<>(Arrays.asList(0.0, INITIAL_LOT));
-        debt = 0.0;
-        streak = 0;
-        winHist.clear();
-        mode = Mode.Normal;
+    private void onCycleComplete(StrategyBase strategy, State s) {
+        s.cycleId++;
+        s.sequence = new ArrayList<>(Arrays.asList(0.0, INITIAL_LOT));
+        s.debt = 0.0;
+        s.streak = 0;
+        s.winHist.clear();
+        s.mode = Mode.Normal;
         lastProcessedOrderIndex = strategy.Trader.getHistoryOrdersCount() - 1;
         cycleStartBalance = strategy.getAccountBalance();
-        // debug("MM", "Cycle complete -> CycleId=" + cycleId);
+        cyclePeakBalance = cycleStartBalance;
     }
 
-    private double currentF(double balance) {
+    private double currentF(State s, double balance) {
         double sumWins = 0.0;
-        for (boolean w : winHist) if (w) sumWins += 1.0;
-        double wr = winHist.isEmpty() ? 0.5 : (sumWins / winHist.size());
-        if (mode == Mode.Normal && (debt / balance > SWITCH_DEBT || wr < SWITCH_WR)) mode = Mode.Defence;
-        else if (mode == Mode.Defence && (streak >= SWITCH_REC || debt / balance < SWITCH_DEBT * 0.5)) mode = Mode.Normal;
-        return mode == Mode.Defence ? F_DEFENCE : F_NORMAL;
+        for (boolean w : s.winHist) if (w) sumWins += 1.0;
+        double wr = s.winHist.isEmpty() ? 0.5 : (sumWins / s.winHist.size());
+        if (s.mode == Mode.Normal && (s.debt / balance > SWITCH_DEBT || wr < SWITCH_WR)) s.mode = Mode.Defence;
+        else if (s.mode == Mode.Defence && (s.streak >= SWITCH_REC || s.debt / balance < SWITCH_DEBT * 0.5)) s.mode = Mode.Normal;
+        return s.mode == Mode.Defence ? F_DEFENCE : F_NORMAL;
     }
 
     private static double round(double val, int decimals) {
