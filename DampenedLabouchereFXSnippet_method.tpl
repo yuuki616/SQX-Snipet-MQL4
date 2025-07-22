@@ -1,6 +1,6 @@
 <@compress_single_line>sqMMDampenedLabouchereFX(
             <@printSymbol block />,
-            <@printOrderType block orderType directionParamName />,
+            (int)<@printOrderType block orderType directionParamName />,
             openPrice,
             sl,
             mmF_NORMAL,

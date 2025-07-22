@@ -5,7 +5,7 @@ double dlRound(double val, int digits) {
    return MathRound(val * factor) / factor;
 }
 
-double sqMMDampenedLabouchereFX(string symbol, ENUM_ORDER_TYPE orderType, double price, double sl,
+double sqMMDampenedLabouchereFX(string symbol, int orderType, double price, double sl,
                                 double fNormal, double fDefence, double switchDebt,
                                 double switchWR, int switchRec, double multStep, double multMax,
                                 double minLot, double initialLot, double multiplier, double sizeStep) {
@@ -42,7 +42,7 @@ double sqMMDampenedLabouchereFX(string symbol, ENUM_ORDER_TYPE orderType, double
       if(openP == closeP) { lastProcessed = i; continue; }
       double lot    = MathAbs(OrderLots());
       int    type   = OrderType();
-      bool win      = (type == ORDER_TYPE_BUY) ? (closeP > openP) : (closeP < openP);
+      bool win      = (type == OP_BUY) ? (closeP > openP) : (closeP < openP);
 
       double betVal = dlRound(sequence[0] + sequence[seqLen-1], 2);
       if(betVal < initialLot) betVal = initialLot;
