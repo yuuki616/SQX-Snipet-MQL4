@@ -26,21 +26,22 @@ double sqMMDampenedLabouchereFX(string symbol, ENUM_ORDER_TYPE orderType, double
       sequence[1] = initialLot;
       seqLen = 2;
       cycleStartBalance = AccountInfoDouble(ACCOUNT_BALANCE);
-      lastProcessed = HistoryOrdersTotal() - 1;
+      lastProcessed = OrdersHistoryTotal() - 1;
    }
 
    if(lastProcessed == -1)
-      lastProcessed = HistoryOrdersTotal() - 1;
+      lastProcessed = OrdersHistoryTotal() - 1;
 
-   int total = HistoryOrdersTotal();
+   int total = OrdersHistoryTotal();
    for(int i = lastProcessed + 1; i < total; i++) {
-      ulong ticket = HistoryOrderGetTicket(i);
-      if(ticket == 0) continue;
-      double openP  = HistoryOrderGetDouble(ticket, ORDER_PRICE_OPEN);
-      double closeP = HistoryOrderGetDouble(ticket, ORDER_PRICE_CLOSE);
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+         continue;
+      ulong  ticket = OrderTicket();
+      double openP  = OrderOpenPrice();
+      double closeP = OrderClosePrice();
       if(openP == closeP) { lastProcessed = i; continue; }
-      double lot    = MathAbs(HistoryOrderGetDouble(ticket, ORDER_VOLUME));
-      int    type   = (int)HistoryOrderGetInteger(ticket, ORDER_TYPE);
+      double lot    = MathAbs(OrderLots());
+      int    type   = OrderType();
       bool win      = (type == ORDER_TYPE_BUY) ? (closeP > openP) : (closeP < openP);
 
       double betVal = dlRound(sequence[0] + sequence[seqLen-1], 2);
@@ -94,7 +95,7 @@ double sqMMDampenedLabouchereFX(string symbol, ENUM_ORDER_TYPE orderType, double
          streak = 0;
          winHistLen = 0;
          mode = 0;
-         lastProcessed = HistoryOrdersTotal() - 1;
+         lastProcessed = OrdersHistoryTotal() - 1;
          cycleStartBalance = balance;
       }
       lastProcessed = i;
