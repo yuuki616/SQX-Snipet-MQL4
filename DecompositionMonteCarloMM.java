@@ -28,6 +28,13 @@ public class DecompositionMonteCarloMM extends MoneyManagementMethod {
     @Parameter(defaultValue="false", name="AuditCSV", category="Logging")
     public boolean AuditCSV;
 
+    // --- Lot cap (default OFF) ---
+    @Parameter(defaultValue="false", name="EnforceMaxLot", category="Safety")
+    public boolean EnforceMaxLot;
+
+    @Parameter(defaultValue="1.50", name="MaxLotCap", minValue=0.0, maxValue=10000.0, step=0.01, category="Safety")
+    public double MaxLotCap;
+
     // ===== Per-symbol state =====
     private static class SymbolState {
         List<Integer> sequence = new ArrayList<>();
@@ -116,8 +123,15 @@ public class DecompositionMonteCarloMM extends MoneyManagementMethod {
         // Multiplier by win streak
         int mult = multiplier(st.winStreak);
 
-        // Lot size
+        // Lot size (raw)
         double lot = betUnits * BaseLot * mult;
+
+        // --- Lot cap (before rounding) ---
+        if (EnforceMaxLot && MaxLotCap > 0.0 && lot > MaxLotCap) {
+            log("DecompMC", "CAP: lot %.5f > MaxLotCap %.5f -> clamp", lot, MaxLotCap);
+            lot = MaxLotCap;
+        }
+
         st.sizeStep = sizeStep;
 
         log("DecompMC", "SEQ=%s BET=%d WS=%d MULT=%d STOCK=%d LOT=%.5f",
