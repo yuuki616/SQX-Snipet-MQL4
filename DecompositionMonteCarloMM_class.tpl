@@ -68,6 +68,13 @@ string DMC_seqToString(int &arr[]) {
    return out;
 }
 
+string DMC_baseSymbol(string sym) {
+   int idx=StringFind(sym,"_");
+   if(idx<0) idx=StringFind(sym,"-");
+   if(idx<0) return sym;
+   return StringSubstr(sym,0,idx);
+}
+
 int DecompositionMonteCarloMM_multiplier(int ws) {
    if(ws<=2) return 1;
    if(ws==3) return 2;
@@ -148,11 +155,14 @@ void DecompositionMonteCarloMM_updateSequence_RDR(DecompositionMonteCarloMM_Stat
 
 ulong DecompositionMonteCarloMM_getLastClosedDeal(string symbol) {
    HistorySelect(0,TimeCurrent());
+   string base=DMC_baseSymbol(symbol);
    for(int i=HistoryDealsTotal()-1;i>=0;i--) {
       ulong ticket=HistoryDealGetTicket(i);
-      if(HistoryDealGetString(ticket,DEAL_SYMBOL)!=symbol) continue;
+      string sym=HistoryDealGetString(ticket,DEAL_SYMBOL);
+      if(DMC_baseSymbol(sym)!=base) continue;
       if((int)HistoryDealGetInteger(ticket,DEAL_ENTRY)!=DEAL_ENTRY_OUT) continue;
       if((int)HistoryDealGetInteger(ticket,DEAL_TYPE)==DEAL_TYPE_BALANCE) continue;
+      if(HistoryDealGetDouble(ticket,DEAL_PROFIT)==0.0) continue;
       return ticket;
    }
    return 0;
