@@ -191,7 +191,12 @@ double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, d
 
    ulong deal=DecompositionMonteCarloMM_getLastClosedDeal(actualSymbol);
    if(deal>0 && deal!=st.prevTicket) {
-      double pl=HistoryDealGetDouble(deal,DEAL_PROFIT);
+      double profit=HistoryDealGetDouble(deal,DEAL_PROFIT);
+      double vol=HistoryDealGetDouble(deal,DEAL_VOLUME);
+      double tv=SymbolInfoDouble(actualSymbol,SYMBOL_TRADE_TICK_VALUE);
+      double ts=SymbolInfoDouble(actualSymbol,SYMBOL_TRADE_TICK_SIZE);
+      double pl=0.0;
+      if(vol>0 && tv>0 && ts>0) pl=profit*ts/(tv*vol);
       st.cyclePL+=pl;
       bool isWin=(pl>0.0);
       if(debugLogs) DMC_log(true,StringFormat("Before update SEQ=%s WS=%d STOCK=%d PL=%.5f",DMC_seqToString(st.sequence),st.winStreak,st.stock,pl));
