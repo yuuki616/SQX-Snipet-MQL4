@@ -18,6 +18,12 @@ struct DecompositionMonteCarloMM_State
    int    winStreak;
    int    stock;
 
+   // ドローダウン管理用
+   double cyclePL;
+   datetime prevOpenTime;
+   datetime prevCloseTime;
+   bool   initialized;
+
    // ロット計算パラメータ
    double baseLot;
    double step;
@@ -34,6 +40,10 @@ void DMC_reset(DecompositionMonteCarloMM_State &st)
    st.sequence[1] = 1;
    st.winStreak   = 0;
    st.stock       = 0;
+   st.cyclePL     = 0.0;
+   st.prevOpenTime  = 0;
+   st.prevCloseTime = 0;
+   st.initialized   = true;
 }
 
 void DMC_init(DecompositionMonteCarloMM_State &st, double baseLot, double step, int decimals)
@@ -42,6 +52,52 @@ void DMC_init(DecompositionMonteCarloMM_State &st, double baseLot, double step, 
    st.step     = step;
    st.decimals = decimals;
    DMC_reset(st);
+}
+
+//----------------------------------------------
+// シンボルごとの状態管理
+//----------------------------------------------
+string DMC_symbols[];
+DecompositionMonteCarloMM_State DMC_states[];
+
+int DMC_getStateIndex(string symbol, double baseLot, double step, int decimals)
+{
+   for (int i=0; i<ArraySize(DMC_symbols); i++)
+   {
+      if (DMC_symbols[i] == symbol)
+         return i;
+   }
+
+   int idx = ArraySize(DMC_symbols);
+   ArrayResize(DMC_symbols, idx + 1);
+   ArrayResize(DMC_states, idx + 1);
+   DMC_init(DMC_states[idx], baseLot, step, decimals);
+   DMC_symbols[idx] = symbol;
+   return idx;
+}
+
+void DMC_applyLastClosedOrder(string symbol, DecompositionMonteCarloMM_State &st)
+{
+   int total = OrdersHistoryTotal();
+   for (int i = total - 1; i >= 0; i--)
+   {
+      if (!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+         continue;
+      if (OrderSymbol() != symbol)
+         continue;
+      if (OrderOpenTime() == st.prevOpenTime && OrderCloseTime() == st.prevCloseTime)
+         break; // 既に処理済み
+
+      double pl = (OrderType() == OP_BUY ?
+                   OrderClosePrice() - OrderOpenPrice() :
+                   OrderOpenPrice()  - OrderClosePrice());
+      st.cyclePL += pl;
+      bool isWin = (pl > 0.0);
+      DMC_updateSequence_RDR(st, isWin);
+      st.prevOpenTime  = OrderOpenTime();
+      st.prevCloseTime = OrderCloseTime();
+      break;
+   }
 }
 
 //----------------------------------------------
@@ -89,13 +145,14 @@ int DMC_getMultiplier(int winStreak)
 //----------------------------------------------
 double DMC_computeLot(const DecompositionMonteCarloMM_State &st)
 {
-   // sequence は const でもサイズを読むのみなので別引数で受け直す
-   // MQL4 制約回避のため一時配列参照は用いず、BET/MULTは外部から与える想定でもOK
-   // ここでは便宜的に再取得ロジックを複製せず、外部から呼ぶ際に
-   // DMC_getBetUnits() と DMC_getMultiplier() を併用してください。
-   // ※ 互換性のため残しますが、通常はメソッドtpl側で lot を組み立てます。
-   // （この関数単独で使用する場合は下の補助関数を使ってください）
-   return 0.0;
+   int betUnits = DMC_getBetUnits(st.sequence);
+   int mult     = DMC_getMultiplier(st.winStreak);
+   double lot   = (double)betUnits * (double)mult * st.baseLot;
+
+   if (st.step > 0.0)
+      lot = MathRound(lot / st.step) * st.step;
+
+   return NormalizeDouble(lot, st.decimals);
 }
 
 // BET・MULT を与えてロット計算（こちらを推奨）
@@ -334,4 +391,48 @@ double DMC_updateAndCalcLot(DecompositionMonteCarloMM_State &st, bool isWin)
    int mult = DMC_getMultiplier(st.winStreak);
 
    return DMC_computeLotFromBM(bet, mult, st);
+}
+
+//----------------------------------------------
+// SQ呼び出し用メイン関数（Java computeTradeSize 対応）
+//----------------------------------------------
+double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, double price, double sl,
+                                     double baseLot, double maxDrawdown, int decimals,
+                                     bool debugLogs, bool auditCSV,
+                                     bool enforceMaxLot, double maxLotCap, double step)
+{
+   if (UseMoneyManagement == false)
+      return baseLot;
+
+   string correctedSymbol = correctSymbol(symbol);
+   int idx = DMC_getStateIndex(correctedSymbol, baseLot, step, decimals);
+   DecompositionMonteCarloMM_State &st = DMC_states[idx];
+   st.baseLot  = baseLot;
+   st.step     = step;
+   st.decimals = decimals;
+
+   // MaxDrawdown によるサイクルリセット
+   if (maxDrawdown != 0.0 && (!st.initialized || st.cyclePL < -maxDrawdown))
+   {
+      DMC_reset(st);
+   }
+   else if (st.initialized && maxDrawdown == 0.0 && st.cyclePL < 0)
+   {
+      st.cyclePL = 0.0;
+   }
+
+   // 最新のクローズドオーダーを反映
+   DMC_applyLastClosedOrder(correctedSymbol, st);
+
+   int betUnits = DMC_getBetUnits(st.sequence);
+   int mult     = DMC_getMultiplier(st.winStreak);
+   double lot   = (double)betUnits * (double)mult * baseLot;
+
+   if (enforceMaxLot && maxLotCap > 0.0 && lot > maxLotCap)
+      lot = maxLotCap;
+
+   if (step > 0.0)
+      lot = MathRound(lot / step) * step;
+
+   return NormalizeDouble(lot, decimals);
 }
