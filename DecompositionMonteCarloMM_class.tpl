@@ -91,16 +91,31 @@ int DMC_getStateIndex(string symbol, double baseLot, double step, int decimals)
    return idx;
 }
 
+string DMC_baseSymbol(string sym)
+{
+   if (StringLen(sym) == 0)
+      return "";
+   int idx = StringFind(sym, "_");
+   if (idx < 0)
+      idx = StringFind(sym, "-");
+   if (idx >= 0)
+      return StringSubstr(sym, 0, idx);
+   return sym;
+}
+
 void DMC_applyLastClosedOrder(string symbol, int magicNumber, DecompositionMonteCarloMM_State &st)
 {
+   string baseSym = DMC_baseSymbol(symbol);
    int total = OrdersHistoryTotal();
    for (int i = total - 1; i >= 0; i--)
    {
       if (!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
          continue;
-      if (OrderSymbol() != symbol)
-         continue;
       if (OrderMagicNumber() != magicNumber)
+         continue;
+      if (DMC_baseSymbol(OrderSymbol()) != baseSym)
+         continue;
+      if (OrderOpenPrice() == OrderClosePrice())
          continue;
       if (OrderOpenTime() == st.prevOpenTime && OrderCloseTime() == st.prevCloseTime)
          break; // 既に処理済み
