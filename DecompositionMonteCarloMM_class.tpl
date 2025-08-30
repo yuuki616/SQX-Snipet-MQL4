@@ -364,8 +364,12 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       }
 
       // 4) A/B平均化（左0ならA、左>0ならB）
-      if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
-      else                     DMC_averageB_index1(st.sequence);
+      n = ArraySize(st.sequence);
+      if (n > 0)
+      {
+         if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
+         else                     DMC_averageB_index1(st.sequence);
+      }
    }
    else
    {
@@ -388,14 +392,18 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       st.sequence[idxAppend] = leftBefore + rightBefore;
 
       // 2) A/B平均化
-      if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
-      else                     DMC_averageB_index1(st.sequence);
+      n = ArraySize(st.sequence);
+      if (n > 0)
+      {
+         if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
+         else                     DMC_averageB_index1(st.sequence);
+      }
 
       // 3) 左端>0 かつ stock>0 なら、左端から stock を消費
       n = ArraySize(st.sequence);
       if (n > 0 && st.sequence[0] > 0 && st.stock > 0)
       {
-         int use = MathMin(st.sequence[0], st.stock);
+         int use = (st.sequence[0] < st.stock ? st.sequence[0] : st.stock);
          st.sequence[0] -= use;
          st.stock       -= use;
       }
