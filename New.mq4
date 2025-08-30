@@ -44,13 +44,13 @@ extern double StopLoss1 = 50;
 //+------------------------------------------------------------------+
 input string smm = "----------- Money Management - DecompositionMonteCarloMM -----------";
 input bool   UseMoneyManagement = true;
-input double mmBaseLot       = #BaseLot#;
-input double mmMaxDrawdown   = #MaxDrawdown#;
-input int    mmDecimals      = #Decimals#;
-input bool   mmDebugLogs     = #DebugLogs#;
-input bool   mmAuditCSV      = #AuditCSV#;
-input bool   mmEnforceMaxLot = #EnforceMaxLot#;
-input double mmMaxLotCap     = #MaxLotCap#;
+input double mmBaseLot       = 0.01;
+input double mmMaxDrawdown   = 100.0;
+input int    mmDecimals      = 2;
+input bool   mmDebugLogs     = true;
+input bool   mmAuditCSV      = false;
+input bool   mmEnforceMaxLot = false;
+input double mmMaxLotCap     = 1.50;
 input double mmStep          = 0.01;
 extern double InitialCapital = 10000; //InitialCapital (0 means whole account balance). Used in some MM methods.
 
