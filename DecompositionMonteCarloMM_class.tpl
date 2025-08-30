@@ -215,8 +215,8 @@ void DMC_averageA_index1(int &seq[])
    long sumTail = 0;
    for (int i=1; i<n; i++) sumTail += seq[i];
 
-   int q = (nTail > 0 ? (int)(sumTail / nTail) : (int)sumTail);
-   int r = (nTail > 0 ? (int)(sumTail % nTail) : 0);
+   int q = (int)(sumTail / nTail);
+   int r = (int)(sumTail % nTail);
 
    for (int i=1; i<n; i++) seq[i] = q;
    if (r > 0) seq[1] += r; // 余りは index1
@@ -239,8 +239,8 @@ void DMC_averageB_index1(int &seq[])
    long S = 0;
    for (int i=0; i<n; i++) S += seq[i];
 
-   int q = (n > 0 ? (int)(S / n) : (int)S);
-   int r = (n > 0 ? (int)(S % n) : 0);
+   int q = (int)(S / n);
+   int r = (int)(S % n);
 
    for (int i=0; i<n; i++) seq[i] = q;
    if (r > 0)
@@ -382,7 +382,7 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
          int winProfit    = (ws - 3) * 5 - 8;
          int normalProfit =  ws - 2;
          int stockGain    =  winProfit - normalProfit;
-         if (stockGain > 0) st.stock += stockGain;
+         st.stock += stockGain;
       }
       st.winStreak = 0;
 
