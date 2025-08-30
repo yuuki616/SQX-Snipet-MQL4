@@ -318,7 +318,7 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
    }
 
    int leftBefore  = st.sequence[0];
-   int rightBefore = st.sequence[n - 1];
+   int rightBefore = (n >= 2 ? st.sequence[n - 1] : st.sequence[0]);
 
    if (isWin)
    {
@@ -367,7 +367,7 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
          n = 2;
       }
 
-      // 5) A/B平均化（左0ならA、左>0ならB）
+      // 4) A/B平均化（左0ならA、左>0ならB）
       if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
       else                     DMC_averageB_index1(st.sequence);
    }
