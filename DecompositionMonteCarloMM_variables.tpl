@@ -10,11 +10,11 @@
 <#-- Inputs for DecompositionMonteCarlo Money Management -->
 input string smm = "----------- Money Management - DecompositionMonteCarloMM -----------";
 input bool   UseMoneyManagement = true;
-input double mmBaseLot       = <@printMMVariableNumber BaseLot/>;
-input double mmMaxDrawdown   = <@printMMVariableNumber MaxDrawdown/>;
-input int    mmDecimals      = <@printMMVariableNumber Decimals/>;
-input bool   mmDebugLogs     = <@printMMVariableBool DebugLogs/>;
-input bool   mmAuditCSV      = <@printMMVariableBool AuditCSV/>;
-input bool   mmEnforceMaxLot = <@printMMVariableBool EnforceMaxLot/>;
-input double mmMaxLotCap     = <@printMMVariableNumber MaxLotCap/>;
+input double mmBaseLot       = <@printMMVariableNumber BaseLot!0/>;
+input double mmMaxDrawdown   = <@printMMVariableNumber MaxDrawdown!0/>;
+input int    mmDecimals      = <@printMMVariableNumber Decimals!0/>;
+input bool   mmDebugLogs     = <@printMMVariableBool DebugLogs!false/>;
+input bool   mmAuditCSV      = <@printMMVariableBool AuditCSV!false/>;
+input bool   mmEnforceMaxLot = <@printMMVariableBool EnforceMaxLot!false/>;
+input double mmMaxLotCap     = <@printMMVariableNumber MaxLotCap!0/>;
 input double mmStep          = ${orderSizeStep!0};
