@@ -270,27 +270,36 @@ void DMC_zeroGeneration(int &seq[])
    int totalInc = S + redistribute;
    int check    = totalInc % subCount;
    int avg      = totalInc / subCount;
-
    if (redistribute < subCount)
    {
-      // 先頭の値を index1 に集約して終了
+      // 先頭の値を index1 に集約
       if (n >= 2) seq[1] += redistribute;
-      return;
    }
-
-   // 先頭を除去（左詰め）
-   for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
-   n -= 1;
-   ArrayResize(seq, n);
-
-   // 残りを avg にそろえる
-   for (int i=0; i<n; i++) seq[i] = avg;
-
-   // check を index1 に寄せつつ先頭0を追加
-   ArrayResize(seq, n+1);
-   for (int i=n; i>=1; i--) seq[i] = seq[i-1];
-   seq[0] = 0;
-   if (check > 0 && n >= 1) seq[1] += check;
+   else if (check == 0)
+   {
+      // 先頭を除去→残りを0埋め→+avg→先頭0を追加
+      for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
+      n -= 1;
+      ArrayResize(seq, n);
+      for (int i=0; i<n; i++) seq[i] = 0;
+      for (int i=0; i<n; i++) seq[i] += avg;
+      ArrayResize(seq, n+1);
+      for (int i=n; i>=1; i--) seq[i] = seq[i-1];
+      seq[0] = 0;
+   }
+   else // check >= 1
+   {
+      // 先頭を除去→残りを0埋め→+avg→先頭側にcheck→先頭0追加
+      for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
+      n -= 1;
+      ArrayResize(seq, n);
+      for (int i=0; i<n; i++) seq[i] = 0;
+      for (int i=0; i<n; i++) seq[i] += avg;
+      if (n >= 1) seq[0] += check; // 残りの check は先頭側へ
+      ArrayResize(seq, n+1);
+      for (int i=n; i>=1; i--) seq[i] = seq[i-1];
+      seq[0] = 0;
+   }
 }
 
 //----------------------------------------------
