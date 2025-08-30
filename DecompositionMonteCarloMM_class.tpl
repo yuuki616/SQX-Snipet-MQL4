@@ -91,7 +91,7 @@ int DMC_getStateIndex(string symbol, double baseLot, double step, int decimals)
    return idx;
 }
 
-void DMC_applyLastClosedOrder(string symbol, DecompositionMonteCarloMM_State &st)
+void DMC_applyLastClosedOrder(string symbol, int magicNumber, DecompositionMonteCarloMM_State &st)
 {
    int total = OrdersHistoryTotal();
    for (int i = total - 1; i >= 0; i--)
@@ -99,6 +99,8 @@ void DMC_applyLastClosedOrder(string symbol, DecompositionMonteCarloMM_State &st
       if (!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
          continue;
       if (OrderSymbol() != symbol)
+         continue;
+      if (OrderMagicNumber() != magicNumber)
          continue;
       if (OrderOpenTime() == st.prevOpenTime && OrderCloseTime() == st.prevCloseTime)
          break; // 既に処理済み
@@ -422,7 +424,8 @@ double DMC_updateAndCalcLot(DecompositionMonteCarloMM_State &st, bool isWin)
 double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, double price, double sl,
                                      double baseLot, double maxDrawdown, int decimals,
                                      bool debugLogs, bool auditCSV,
-                                     bool enforceMaxLot, double maxLotCap, double step)
+                                     bool enforceMaxLot, double maxLotCap, double step,
+                                     int magicNumber)
 {
    if (UseMoneyManagement == false)
       return baseLot;
@@ -448,7 +451,7 @@ double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, d
    }
 
    // 最新のクローズドオーダーを反映
-   DMC_applyLastClosedOrder(correctedSymbol, st);
+   DMC_applyLastClosedOrder(correctedSymbol, magicNumber, st);
 
    int betUnits = DMC_getBetUnits(st.sequence);
    int mult     = DMC_getMultiplier(st.winStreak);
