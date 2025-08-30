@@ -278,7 +278,7 @@ void DMC_zeroGeneration(int &seq[])
    else if (check == 0)
    {
       // 先頭を除去→残りを0埋め→+avg→先頭0を追加
-      for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
+      for (int i=1; i<n; i++) seq[i-1] = seq[i];
       n -= 1;
       ArrayResize(seq, n);
       for (int i=0; i<n; i++) seq[i] = 0;
@@ -290,7 +290,7 @@ void DMC_zeroGeneration(int &seq[])
    else // check >= 1
    {
       // 先頭を除去→残りを0埋め→+avg→先頭側にcheck→先頭0追加
-      for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
+      for (int i=1; i<n; i++) seq[i-1] = seq[i];
       n -= 1;
       ArrayResize(seq, n);
       for (int i=0; i<n; i++) seq[i] = 0;
@@ -328,7 +328,9 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       // 2) 両端を削除
       if (n >= 2)
       {
-         for (int i=0; i<n-2; i++) st.sequence[i] = st.sequence[i+1];
+         // 左右端を除去するために内部要素をシフト
+         for (int i=1; i<n-1; i++)
+            st.sequence[i-1] = st.sequence[i];
          ArrayResize(st.sequence, n - 2);
       }
       else
@@ -381,8 +383,9 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       st.winStreak = 0;
 
       // 1) 右端へ (left+right) を追加
-      ArrayResize(st.sequence, n + 1);
-      st.sequence[n] = leftBefore + rightBefore;
+      int idxAppend = ArraySize(st.sequence);
+      ArrayResize(st.sequence, idxAppend + 1);
+      st.sequence[idxAppend] = leftBefore + rightBefore;
 
       // 2) A/B平均化
       if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
