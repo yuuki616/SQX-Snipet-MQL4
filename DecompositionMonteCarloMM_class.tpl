@@ -160,11 +160,10 @@ string DMC_seqToString(int &seq[])
 int DMC_getBetUnits(const int &seq[])
 {
    int n = ArraySize(seq);
-   if (n == 0) return 1;
+   if (n == 0) return 0;
    int left  = seq[0];
    int right = (n >= 2 ? seq[n-1] : left);
-   int bet   = left + right;
-   return (bet > 0 ? bet : 1);
+   return left + right;
 }
 
 //----------------------------------------------
@@ -371,43 +370,44 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       // 5) A/B平均化（左0ならA、左>0ならB）
       if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
       else                     DMC_averageB_index1(st.sequence);
-      return;
    }
-
-   // ---- 敗北時 ----
-
-   // 0) WS>=6 のときだけ Java式で stock に上乗せして WS を0に戻す
-   if (st.winStreak > 5)
+   else
    {
-      int ws           = st.winStreak;
-      int winProfit    = (ws - 3) * 5 - 8;
-      int normalProfit =  ws - 2;
-      int stockGain    =  winProfit - normalProfit;
-      if (stockGain > 0) st.stock += stockGain;
+      // ---- 敗北時 ----
+
+      // 0) WS>=6 のときだけ Java式で stock に上乗せして WS を0に戻す
+      if (st.winStreak > 5)
+      {
+         int ws           = st.winStreak;
+         int winProfit    = (ws - 3) * 5 - 8;
+         int normalProfit =  ws - 2;
+         int stockGain    =  winProfit - normalProfit;
+         if (stockGain > 0) st.stock += stockGain;
+      }
+      st.winStreak = 0;
+
+      // 1) 右端へ (left+right) を追加
+      int addVal = leftBefore + rightBefore;
+      ArrayResize(st.sequence, n + 1);
+      st.sequence[n] = addVal;
+
+      // 2) A/B平均化
+      if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
+      else                     DMC_averageB_index1(st.sequence);
+
+      // 3) 左端>0 かつ stock>0 なら、左端から stock を消費
+      n = ArraySize(st.sequence);
+      if (n > 0 && st.sequence[0] > 0 && st.stock > 0)
+      {
+         int use = (st.sequence[0] <= st.stock ? st.sequence[0] : st.stock);
+         st.sequence[0] -= use;
+         st.stock       -= use;
+      }
+
+      // 4) 左端がなお >=1 の場合は zeroGeneration
+      if (ArraySize(st.sequence) > 0 && st.sequence[0] >= 1)
+         DMC_zeroGeneration(st.sequence);
    }
-   st.winStreak = 0;
-
-   // 1) 右端へ (left+right) を追加
-   int addVal = leftBefore + rightBefore;
-   ArrayResize(st.sequence, n + 1);
-   st.sequence[n] = addVal;
-
-   // 2) A/B平均化
-   if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
-   else                     DMC_averageB_index1(st.sequence);
-
-   // 3) 左端>0 かつ stock>0 なら、左端から stock を消費
-   n = ArraySize(st.sequence);
-   if (n > 0 && st.sequence[0] > 0 && st.stock > 0)
-   {
-      int use = (st.sequence[0] <= st.stock ? st.sequence[0] : st.stock);
-      st.sequence[0] -= use;
-      st.stock       -= use;
-   }
-
-   // 4) 左端がなお >=1 の場合は zeroGeneration
-   if (ArraySize(st.sequence) > 0 && st.sequence[0] >= 1)
-      DMC_zeroGeneration(st.sequence);
 
    // 5) 念のための保険
    if (ArraySize(st.sequence) == 0)
