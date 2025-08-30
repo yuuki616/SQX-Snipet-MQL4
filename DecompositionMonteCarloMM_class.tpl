@@ -261,15 +261,15 @@ void DMC_zeroGeneration(int &seq[])
    int redistribute = seq[0];
    seq[0] = 0;
 
-   long S = 0;
+   int S = 0;
    for (int i=0; i<n; i++) S += seq[i];
 
    int subCount = n - 1;
    if (subCount <= 0) subCount = 1;
 
-   long totalInc = S + redistribute;
-   int  check    = (int)(totalInc % subCount);
-   int  avg      = (int)(totalInc / subCount);
+   int totalInc = S + redistribute;
+   int check    = totalInc % subCount;
+   int avg      = totalInc / subCount;
    if (redistribute < subCount)
    {
       // 先頭の値を index1 に集約
