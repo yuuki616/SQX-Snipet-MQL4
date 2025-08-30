@@ -1,0 +1,337 @@
+// =============================================================
+// Decomposition Monte Carlo Money Management - MQL4 Class (TPL)
+// Java 実装とロジック完全一致版
+//   - 勝利時：両端消し込み → 残1要素なら2分割 → A/B平均
+//   - 敗北時：WS>=6でstock加算 → 右端に(left+right)追加 → A/B平均
+//             → 左端>0 & stock>0を消費 → 必要ならzeroGeneration
+//   - BET単位数 = 左端 + 右端（要素1つなら left*2 と同等）
+//   - 乗数 MULT = WS: 0–2→1, 3→2, 4→3, 5+→5
+//   - 口数 = BET * MULT * baseLot を step/decimals で正規化
+// =============================================================
+
+struct DecompositionMonteCarloMM_State
+{
+   // 進化する数列（Labouchere系）
+   int    sequence[];
+
+   // 直近連勝数、ストック
+   int    winStreak;
+   int    stock;
+
+   // ロット計算パラメータ
+   double baseLot;
+   double step;
+   int    decimals;
+};
+
+//----------------------------------------------
+// 初期化・リセット
+//----------------------------------------------
+void DMC_reset(DecompositionMonteCarloMM_State &st)
+{
+   ArrayResize(st.sequence, 2);
+   st.sequence[0] = 0;
+   st.sequence[1] = 1;
+   st.winStreak   = 0;
+   st.stock       = 0;
+}
+
+void DMC_init(DecompositionMonteCarloMM_State &st, double baseLot, double step, int decimals)
+{
+   st.baseLot  = baseLot;
+   st.step     = step;
+   st.decimals = decimals;
+   DMC_reset(st);
+}
+
+//----------------------------------------------
+// 文字列化（任意：ログ向け）
+//----------------------------------------------
+string DMC_seqToString(int &seq[])
+{
+   int n = ArraySize(seq);
+   string s = "[";
+   for (int i=0; i<n; i++)
+   {
+      if (i > 0) s += ",";
+      s += IntegerToString(seq[i]);
+   }
+   s += "]";
+   return s;
+}
+
+//----------------------------------------------
+// BET（単位数）＝ 左端 + 右端（要素1つのときは left*2 相当）
+//----------------------------------------------
+int DMC_getBetUnits(int &seq[])
+{
+   int n = ArraySize(seq);
+   if (n == 0) return 1;
+   int left  = seq[0];
+   int right = (n >= 2 ? seq[n-1] : left);
+   int bet   = left + right;
+   return (bet > 0 ? bet : 1);
+}
+
+//----------------------------------------------
+// 乗数＝WS: 0–2→1, 3→2, 4→3, 5+→5（Java同様）
+//----------------------------------------------
+int DMC_getMultiplier(int winStreak)
+{
+   if (winStreak <= 2) return 1;
+   if (winStreak == 3) return 2;
+   if (winStreak == 4) return 3;
+   return 5;
+}
+
+//----------------------------------------------
+// ロット計算：BET * MULT * baseLot を step/decimals で正規化
+//----------------------------------------------
+double DMC_computeLot(const DecompositionMonteCarloMM_State &st)
+{
+   // sequence は const でもサイズを読むのみなので別引数で受け直す
+   // MQL4 制約回避のため一時配列参照は用いず、BET/MULTは外部から与える想定でもOK
+   // ここでは便宜的に再取得ロジックを複製せず、外部から呼ぶ際に
+   // DMC_getBetUnits() と DMC_getMultiplier() を併用してください。
+   // ※ 互換性のため残しますが、通常はメソッドtpl側で lot を組み立てます。
+   // （この関数単独で使用する場合は下の補助関数を使ってください）
+   return 0.0;
+}
+
+// BET・MULT を与えてロット計算（こちらを推奨）
+double DMC_computeLotFromBM(int betUnits, int multiplier, const DecompositionMonteCarloMM_State &st)
+{
+   double lot = (double)betUnits * (double)multiplier * st.baseLot;
+
+   if (st.step > 0.0)
+      lot = MathCeil(lot / st.step) * st.step;
+
+   return NormalizeDouble(lot, st.decimals);
+}
+
+//----------------------------------------------
+// A平均（左==0）：先頭0は保持し、残り(n-1)を等分。余りは index1 に集約
+//----------------------------------------------
+void DMC_averageA_index1(int &seq[])
+{
+   int n = ArraySize(seq);
+   if (n < 2 || seq[0] != 0) return;
+
+   int nTail = n - 1;
+   int sumTail = 0;
+   for (int i=1; i<n; i++) sumTail += seq[i];
+
+   int q = (nTail > 0 ? sumTail / nTail : sumTail);
+   int r = (nTail > 0 ? sumTail % nTail : 0);
+
+   for (int i=1; i<n; i++) seq[i] = q;
+   if (r > 0) seq[1] += r; // 余りは index1
+}
+
+//----------------------------------------------
+// B平均（左>0）：全要素 n を等分。余りは index1 に集約、index0 は0にリセット
+//----------------------------------------------
+void DMC_averageB_index1(int &seq[])
+{
+   int n = ArraySize(seq);
+   if (n <= 0) return;
+
+   int S = 0;
+   for (int i=0; i<n; i++) S += seq[i];
+
+   int q = (n > 0 ? S / n : S);
+   int r = (n > 0 ? S % n : 0);
+
+   if (r == 0)
+   {
+      seq[0] = 0;
+      for (int i=1; i<n; i++) seq[i] = q;
+   }
+   else
+   {
+      for (int i=0; i<n; i++) seq[i] = q;
+      if (n >= 2) seq[1] += r;  // 余りは index1
+      seq[0] = 0;               // 先頭は必ず0へ
+   }
+}
+
+//----------------------------------------------
+// zeroGeneration（左端を0にし、その値を残りへ再配分）
+//----------------------------------------------
+void DMC_zeroGeneration(int &seq[])
+{
+   int n = ArraySize(seq);
+   if (n <= 0) return;
+
+   int redistribute = seq[0];
+   seq[0] = 0;
+
+   int S = 0;
+   for (int i=0; i<n; i++) S += seq[i];
+
+   int subCount = n - 1;
+   if (subCount <= 0) subCount = 1;
+
+   int totalInc = S + redistribute;
+   int check    = totalInc % subCount;
+   int avg      = totalInc / subCount;
+
+   // 少量の場合はすべて index1 に寄せる
+   if (redistribute < subCount)
+   {
+      if (n >= 2) seq[1] += redistribute;
+      return;
+   }
+
+   // 先頭要素を物理的に削除（左詰め）
+   for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
+   n -= 1;
+   ArrayResize(seq, n);
+
+   // 残り n 要素を avg にそろえる
+   for (int i=0; i<n; i++) seq[i] = avg;
+
+   // 余りの扱いと先頭0の再挿入
+   ArrayResize(seq, n+1);
+   for (int i=n; i>=1; i--) seq[i] = seq[i-1];
+   if (check == 0)
+   {
+      seq[0] = 0;
+   }
+   else
+   {
+      seq[0] = 0;
+      // 余りは（元index1）現index1へ
+      if (n >= 1) seq[1] += check;
+   }
+}
+
+//----------------------------------------------
+// RDR 更新（勝敗判定に基づく数列進化）※Java完全準拠
+//----------------------------------------------
+void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
+{
+   int n = ArraySize(st.sequence);
+   if (n == 0)
+   {
+      ArrayResize(st.sequence, 2);
+      st.sequence[0] = 0;
+      st.sequence[1] = 1;
+      n = 2;
+   }
+
+   int leftBefore  = st.sequence[0];
+   int rightBefore = st.sequence[n - 1];
+
+   if (isWin)
+   {
+      // 1) 勝利時WSの扱い（[0,1]でのみ連勝カウント）
+      if (n == 2 && leftBefore == 0 && rightBefore == 1) st.winStreak++;
+      else                                               st.winStreak = 0;
+
+      // 2) 両端の消し込み（要素が2つ以上なら先頭と末尾を削除）
+      if (n >= 2)
+      {
+         // 先頭を詰める（n-2 要素が残る想定）
+         for (int i=0; i<n-2; i++) st.sequence[i] = st.sequence[i+1];
+         ArrayResize(st.sequence, n - 2);
+      }
+      else
+      {
+         ArrayResize(st.sequence, 0);
+      }
+
+      // 3) 空なら [0,1] に再初期化
+      n = ArraySize(st.sequence);
+      if (n == 0)
+      {
+         ArrayResize(st.sequence, 2);
+         st.sequence[0] = 0;
+         st.sequence[1] = 1;
+         return;
+      }
+
+      // 4) 要素が1つなら2分割（偶数は等分、奇数はfloor/ceil）
+      if (n == 1)
+      {
+         int v = st.sequence[0];
+         if (v <= 1)
+         {
+            st.sequence[0] = 0;
+            ArrayResize(st.sequence, 2);
+            st.sequence[1] = 1;
+            return;
+         }
+         else
+         {
+            int p = v / 2;
+            int q = v - p;     // ceil(v/2)
+            st.sequence[0] = p;
+            ArrayResize(st.sequence, 2);
+            st.sequence[1] = q;
+         }
+      }
+
+      // 5) A/B平均化（左0ならA、左>0ならB）
+      if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
+      else                     DMC_averageB_index1(st.sequence);
+      return;
+   }
+
+   // ---- 敗北時 ----
+
+   // 0) WS>=6 のときだけ Java式で stock に上乗せして WS を0に戻す
+   if (st.winStreak > 5)
+   {
+      int ws           = st.winStreak;
+      int winProfit    = (ws - 3) * 5 - 8;
+      int normalProfit =  ws - 2;
+      int stockGain    =  winProfit - normalProfit;
+      if (stockGain > 0) st.stock += stockGain;
+   }
+   st.winStreak = 0;
+
+   // 1) 右端へ (left+right) を追加
+   int addVal = leftBefore + rightBefore;
+   ArrayResize(st.sequence, n + 1);
+   st.sequence[n] = addVal;
+
+   // 2) A/B平均化
+   if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
+   else                     DMC_averageB_index1(st.sequence);
+
+   // 3) 左端>0 かつ stock>0 なら、左端から stock を消費 → 必要あればzeroGeneration
+   n = ArraySize(st.sequence);
+   if (n > 0 && st.sequence[0] > 0 && st.stock > 0)
+   {
+      int use = (st.sequence[0] <= st.stock ? st.sequence[0] : st.stock);
+      st.sequence[0] -= use;
+      st.stock       -= use;
+      if (st.sequence[0] >= 1) DMC_zeroGeneration(st.sequence);
+   }
+
+   // 4) 念のための保険
+   if (ArraySize(st.sequence) == 0)
+   {
+      ArrayResize(st.sequence, 2);
+      st.sequence[0] = 0;
+      st.sequence[1] = 1;
+   }
+}
+
+//----------------------------------------------
+// 外部呼び出し用：勝敗反映＆ロット計算のワンショット
+//   - isWin: 直近トレードの結果
+//   - 戻り値 : 次回トレードのロット
+//----------------------------------------------
+double DMC_updateAndCalcLot(DecompositionMonteCarloMM_State &st, bool isWin)
+{
+   // 勝敗で数列更新
+   DMC_updateSequence_RDR(st, isWin);
+
+   // 次回BET/MULTとロット
+   int bet  = DMC_getBetUnits(st.sequence);
+   int mult = DMC_getMultiplier(st.winStreak);
+
+   return DMC_computeLotFromBM(bet, mult, st);
+}
