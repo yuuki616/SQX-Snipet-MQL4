@@ -60,6 +60,21 @@ void DMC_init(DecompositionMonteCarloMM_State &st, double baseLot, double step, 
 string DMC_symbols[];
 DecompositionMonteCarloMM_State DMC_states[];
 
+bool DMC_debugLogs = false;
+bool DMC_auditCSV  = false;
+
+void DMC_log(string tag, string msg)
+{
+   if (DMC_debugLogs)
+      PrintFormat("%s: %s", tag, msg);
+}
+
+void DMC_audit(string msg)
+{
+   if (DMC_auditCSV)
+      Print("DecompMC_AUDIT: " + msg);
+}
+
 int DMC_getStateIndex(string symbol, double baseLot, double step, int decimals)
 {
    for (int i=0; i<ArraySize(DMC_symbols); i++)
@@ -93,7 +108,13 @@ void DMC_applyLastClosedOrder(string symbol, DecompositionMonteCarloMM_State &st
                    OrderOpenPrice()  - OrderClosePrice());
       st.cyclePL += pl;
       bool isWin = (pl > 0.0);
+      if (DMC_debugLogs)
+         DMC_log("DecompMC_DEBUG", StringFormat("Before update  SEQ=%s  WS=%d  STOCK=%d  PL=%.5f",
+                                  DMC_seqToString(st.sequence), st.winStreak, st.stock, pl));
       DMC_updateSequence_RDR(st, isWin);
+      if (DMC_debugLogs)
+         DMC_log("DecompMC_DEBUG", StringFormat("After  update   SEQ=%s  WS=%d  STOCK=%d",
+                                  DMC_seqToString(st.sequence), st.winStreak, st.stock));
       st.prevOpenTime  = OrderOpenTime();
       st.prevCloseTime = OrderCloseTime();
       break;
@@ -410,10 +431,13 @@ double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, d
    st.baseLot  = baseLot;
    st.step     = step;
    st.decimals = decimals;
+   DMC_debugLogs = debugLogs;
+   DMC_auditCSV  = auditCSV;
 
    // MaxDrawdown によるサイクルリセット
    if (maxDrawdown != 0.0 && (!st.initialized || st.cyclePL < -maxDrawdown))
    {
+      DMC_log("DecompMC", StringFormat("Resetting cycle: CyclePL=%.5f MaxDD=%.5f", st.cyclePL, maxDrawdown));
       DMC_reset(st);
    }
    else if (st.initialized && maxDrawdown == 0.0 && st.cyclePL < 0)
@@ -427,6 +451,13 @@ double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, d
    int betUnits = DMC_getBetUnits(st.sequence);
    int mult     = DMC_getMultiplier(st.winStreak);
    double lot   = (double)betUnits * (double)mult * baseLot;
+   DMC_log("DecompMC", StringFormat("SEQ=%s BET=%d WS=%d MULT=%d STOCK=%d LOT=%.5f",
+                                    DMC_seqToString(st.sequence), betUnits, st.winStreak,
+                                    mult, st.stock, lot));
+   if (DMC_auditCSV)
+      DMC_audit(StringFormat("time=%d,symbol=%s,seq=%s,bet=%d,ws=%d,mult=%d,stock=%d,lot=%.5f,baselot=%.5f,step=%.5f,dec=%d,cycle_pl=%.5f",
+                             TimeCurrent(), correctedSymbol, DMC_seqToString(st.sequence), betUnits,
+                             st.winStreak, mult, st.stock, lot, baseLot, st.step, decimals, st.cyclePL));
 
    if (enforceMaxLot && maxLotCap > 0.0 && lot > maxLotCap)
       lot = maxLotCap;
