@@ -334,20 +334,18 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       if (n == 1)
       {
          int v = st.sequence[0];
-         if (v <= 1)
+         ArrayResize(st.sequence, 0);
+         int l = v / 2;
+         ArrayResize(st.sequence, 2);
+         if (v % 2 == 0)
          {
-            st.sequence[0] = 0;
-            ArrayResize(st.sequence, 2);
-            st.sequence[1] = 1;
-            return;
+            st.sequence[0] = l;
+            st.sequence[1] = l;
          }
          else
          {
-            int p = v / 2;
-            int q = v - p;     // ceil(v/2)
-            st.sequence[0] = p;
-            ArrayResize(st.sequence, 2);
-            st.sequence[1] = q;
+            st.sequence[0] = l;
+            st.sequence[1] = l + 1;
          }
       }
 
