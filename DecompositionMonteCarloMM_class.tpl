@@ -332,14 +332,14 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
          // 先頭を削除
          for (int i=0; i<n-1; i++) st.sequence[i] = st.sequence[i+1];
          ArrayResize(st.sequence, n-1);
-         n--;
       }
+      n = ArraySize(st.sequence);
       if (n > 0)
       {
          // 末尾を削除
          ArrayResize(st.sequence, n-1);
-         n--;
       }
+      n = ArraySize(st.sequence);
 
       // 3) 空なら [0,1] に再初期化、要素1つなら二分割
       if (n == 0)
@@ -364,7 +364,7 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
             st.sequence[0] = l;
             st.sequence[1] = l + 1;
          }
-         n = 2;
+         n = ArraySize(st.sequence);
       }
 
       // 4) A/B平均化（左0ならA、左>0ならB）
@@ -390,6 +390,7 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       int addVal = leftBefore + rightBefore;
       ArrayResize(st.sequence, n + 1);
       st.sequence[n] = addVal;
+      n = ArraySize(st.sequence);
 
       // 2) A/B平均化
       if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
