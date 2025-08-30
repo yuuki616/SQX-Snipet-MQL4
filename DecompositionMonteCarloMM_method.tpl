@@ -9,5 +9,6 @@
             mmDebugLogs, 
             mmAuditCSV, 
             mmEnforceMaxLot, 
-            mmMaxLotCap, 
-            mmStep)</@compress_single_line>
+            mmMaxLotCap,
+            mmStep,
+            MagicNumber)</@compress_single_line>
