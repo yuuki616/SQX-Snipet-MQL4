@@ -273,34 +273,24 @@ void DMC_zeroGeneration(int &seq[])
 
    if (redistribute < subCount)
    {
-      // 先頭の値を index1 に集約
+      // 先頭の値を index1 に集約して終了
       if (n >= 2) seq[1] += redistribute;
+      return;
    }
-   else if (check == 0)
-   {
-      // 先頭を除去→残りを0埋め→+avg→先頭0を追加
-      for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
-      ArrayResize(seq, n-1);
-      n = ArraySize(seq);
-      for (int i=0; i<n; i++) seq[i] = 0;
-      for (int i=0; i<n; i++) seq[i] = seq[i] + avg;
-      ArrayResize(seq, n+1);
-      for (int i=n; i>=1; i--) seq[i] = seq[i-1];
-      seq[0] = 0;
-   }
-   else
-   {
-      // 先頭を除去→残りを0埋め→+avg→checkを先頭側へ→先頭0を追加
-      for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
-      ArrayResize(seq, n-1);
-      n = ArraySize(seq);
-      for (int i=0; i<n; i++) seq[i] = 0;
-      for (int i=0; i<n; i++) seq[i] = seq[i] + avg;
-      if (n > 0) seq[0] += check; // 残りの check は先頭側へ
-      ArrayResize(seq, n+1);
-      for (int i=n; i>=1; i--) seq[i] = seq[i-1];
-      seq[0] = 0;
-   }
+
+   // 先頭を除去（左詰め）
+   for (int i=0; i<n-1; i++) seq[i] = seq[i+1];
+   n -= 1;
+   ArrayResize(seq, n);
+
+   // 残りを avg にそろえる
+   for (int i=0; i<n; i++) seq[i] = avg;
+
+   // check を index1 に寄せつつ先頭0を追加
+   ArrayResize(seq, n+1);
+   for (int i=n; i>=1; i--) seq[i] = seq[i-1];
+   seq[0] = 0;
+   if (check > 0 && n >= 1) seq[1] += check;
 }
 
 //----------------------------------------------
@@ -326,28 +316,24 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       if (n == 2 && leftBefore == 0 && rightBefore == 1) st.winStreak++;
       else                                               st.winStreak = 0;
 
-      // 2) 左右端を削除
-      if (n > 0)
+      // 2) 両端を削除
+      if (n >= 2)
       {
-         // 先頭を削除
-         for (int i=0; i<n-1; i++) st.sequence[i] = st.sequence[i+1];
-         ArrayResize(st.sequence, n-1);
+         for (int i=0; i<n-2; i++) st.sequence[i] = st.sequence[i+1];
+         ArrayResize(st.sequence, n - 2);
       }
-      n = ArraySize(st.sequence);
-      if (n > 0)
+      else
       {
-         // 末尾を削除
-         ArrayResize(st.sequence, n-1);
+         ArrayResize(st.sequence, 0);
       }
-      n = ArraySize(st.sequence);
 
-      // 3) 空なら [0,1] に再初期化、要素1つなら二分割
+      // 3) 空なら [0,1]、要素1つなら二分割
+      n = ArraySize(st.sequence);
       if (n == 0)
       {
          ArrayResize(st.sequence, 2);
          st.sequence[0] = 0;
          st.sequence[1] = 1;
-         n = 2;
       }
       else if (n == 1)
       {
@@ -364,7 +350,6 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
             st.sequence[0] = l;
             st.sequence[1] = l + 1;
          }
-         n = ArraySize(st.sequence);
       }
 
       // 4) A/B平均化（左0ならA、左>0ならB）
@@ -387,10 +372,8 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
       st.winStreak = 0;
 
       // 1) 右端へ (left+right) を追加
-      int addVal = leftBefore + rightBefore;
       ArrayResize(st.sequence, n + 1);
-      st.sequence[n] = addVal;
-      n = ArraySize(st.sequence);
+      st.sequence[n] = leftBefore + rightBefore;
 
       // 2) A/B平均化
       if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
