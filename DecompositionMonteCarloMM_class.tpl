@@ -207,12 +207,18 @@ void DMC_averageA_index1(int &seq[])
 }
 
 //----------------------------------------------
-// B平均（左>0）：全要素 n を等分。余りは index1 に集約、index0 は0にリセット
+// B平均（左>=1）：全要素 n を等分。余りは index1 に集約
 //----------------------------------------------
 void DMC_averageB_index1(int &seq[])
 {
    int n = ArraySize(seq);
-   if (n <= 0) return;
+   if (n <= 0)
+   {
+      ArrayResize(seq, 2);
+      seq[0] = 0;
+      seq[1] = 1;
+      return;
+   }
 
    int S = 0;
    for (int i=0; i<n; i++) S += seq[i];
@@ -220,16 +226,11 @@ void DMC_averageB_index1(int &seq[])
    int q = (n > 0 ? S / n : S);
    int r = (n > 0 ? S % n : 0);
 
-   if (r == 0)
+   for (int i=0; i<n; i++) seq[i] = q;
+   if (r > 0)
    {
-      seq[0] = 0;
-      for (int i=1; i<n; i++) seq[i] = q;
-   }
-   else
-   {
-      for (int i=0; i<n; i++) seq[i] = q;
       if (n >= 2) seq[1] += r;  // 余りは index1
-      seq[0] = 0;               // 先頭は必ず0へ
+      else         seq[0] += r;  // 要素が1つだけの場合
    }
 }
 
