@@ -488,9 +488,10 @@ double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, d
    if (enforceMaxLot && maxLotCap > 0.0 && lot > maxLotCap)
       lot = maxLotCap;
 
-   if (step > 0.0)
-      lot = MathRound(lot / step) * step;
+   // round using stored step/decimals (Javaの round 相当)
+   if (st.step > 0.0)
+      lot = MathRound(lot / st.step) * st.step;
 
    DMC_states[idx] = st;
-   return NormalizeDouble(lot, decimals);
+   return NormalizeDouble(lot, st.decimals);
 }
