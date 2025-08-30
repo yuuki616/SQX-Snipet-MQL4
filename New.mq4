@@ -187,7 +187,7 @@ void OnTick() {
       && sqMarketPositionIsFlat(MagicNumber, "Current", ""))
    {
       // Action #1
-         _ticket = sqOpenOrder(OP_BUY, "Current", sqMMDecompositionMonteCarloMM("Current",OP_BUY,openPrice,sl,mmBaseLot,mmMaxDrawdown,mmDecimals,mmDebugLogs,mmAuditCSV,mmEnforceMaxLot,mmMaxLotCap,mmStep), 0, MagicNumber, "", 0, false, false, CLR_NONE);
+          _ticket = sqOpenOrder(OP_BUY, "Current", sqMMDecompositionMonteCarloMM("Current",OP_BUY,0,0,mmBaseLot,mmMaxDrawdown,mmDecimals,mmDebugLogs,mmAuditCSV,mmEnforceMaxLot,mmMaxLotCap,mmStep), 0, MagicNumber, "", 0, false, false, CLR_NONE);
 
       if(_ticket > 0 && OrderSelect(_ticket, SELECT_BY_TICKET)) {
          // set or initialize all order exit methods (SL, PT, Trailing Stop, Exit After Bars, etc.)
@@ -4759,7 +4759,7 @@ string DMC_seqToString(int &seq[])
 //----------------------------------------------
 // BET（単位数）＝ 左端 + 右端（要素1つのときは left*2 相当）
 //----------------------------------------------
-int DMC_getBetUnits(int &seq[])
+int DMC_getBetUnits(const int &seq[])
 {
    int n = ArraySize(seq);
    if (n == 0) return 1;
@@ -5048,7 +5048,7 @@ double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, d
 
    string correctedSymbol = correctSymbol(symbol);
    int idx = DMC_getStateIndex(correctedSymbol, baseLot, step, decimals);
-   DecompositionMonteCarloMM_State &st = DMC_states[idx];
+   DecompositionMonteCarloMM_State st = DMC_states[idx];
    st.baseLot  = baseLot;
    st.step     = step;
    st.decimals = decimals;
@@ -5086,6 +5086,7 @@ double sqMMDecompositionMonteCarloMM(string symbol, ENUM_ORDER_TYPE orderType, d
    if (step > 0.0)
       lot = MathRound(lot / step) * step;
 
+   DMC_states[idx] = st;
    return NormalizeDouble(lot, decimals);
 }
 
