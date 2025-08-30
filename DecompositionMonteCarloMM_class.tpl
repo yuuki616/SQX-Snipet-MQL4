@@ -182,7 +182,7 @@ double DMC_computeLotFromBM(int betUnits, int multiplier, const DecompositionMon
    double lot = (double)betUnits * (double)multiplier * st.baseLot;
 
    if (st.step > 0.0)
-      lot = MathCeil(lot / st.step) * st.step;
+      lot = MathRound(lot / st.step) * st.step;
 
    return NormalizeDouble(lot, st.decimals);
 }
