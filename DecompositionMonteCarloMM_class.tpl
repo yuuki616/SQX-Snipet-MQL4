@@ -195,12 +195,12 @@ void DMC_averageA_index1(int &seq[])
    int n = ArraySize(seq);
    if (n < 2 || seq[0] != 0) return;
 
-   int nTail = n - 1;
-   int sumTail = 0;
+   int  nTail   = n - 1;
+   long sumTail = 0;
    for (int i=1; i<n; i++) sumTail += seq[i];
 
-   int q = (nTail > 0 ? sumTail / nTail : sumTail);
-   int r = (nTail > 0 ? sumTail % nTail : 0);
+   int q = (nTail > 0 ? (int)(sumTail / nTail) : (int)sumTail);
+   int r = (nTail > 0 ? (int)(sumTail % nTail) : 0);
 
    for (int i=1; i<n; i++) seq[i] = q;
    if (r > 0) seq[1] += r; // 余りは index1
@@ -220,11 +220,11 @@ void DMC_averageB_index1(int &seq[])
       return;
    }
 
-   int S = 0;
+   long S = 0;
    for (int i=0; i<n; i++) S += seq[i];
 
-   int q = (n > 0 ? S / n : S);
-   int r = (n > 0 ? S % n : 0);
+   int q = (n > 0 ? (int)(S / n) : (int)S);
+   int r = (n > 0 ? (int)(S % n) : 0);
 
    for (int i=0; i<n; i++) seq[i] = q;
    if (r > 0)
@@ -379,17 +379,20 @@ void DMC_updateSequence_RDR(DecompositionMonteCarloMM_State &st, bool isWin)
    if (st.sequence[0] == 0) DMC_averageA_index1(st.sequence);
    else                     DMC_averageB_index1(st.sequence);
 
-   // 3) 左端>0 かつ stock>0 なら、左端から stock を消費 → 必要あればzeroGeneration
+   // 3) 左端>0 かつ stock>0 なら、左端から stock を消費
    n = ArraySize(st.sequence);
    if (n > 0 && st.sequence[0] > 0 && st.stock > 0)
    {
       int use = (st.sequence[0] <= st.stock ? st.sequence[0] : st.stock);
       st.sequence[0] -= use;
       st.stock       -= use;
-      if (st.sequence[0] >= 1) DMC_zeroGeneration(st.sequence);
    }
 
-   // 4) 念のための保険
+   // 4) 左端がなお >=1 の場合は zeroGeneration
+   if (ArraySize(st.sequence) > 0 && st.sequence[0] >= 1)
+      DMC_zeroGeneration(st.sequence);
+
+   // 5) 念のための保険
    if (ArraySize(st.sequence) == 0)
    {
       ArrayResize(st.sequence, 2);
