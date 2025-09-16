@@ -1,4 +1,94 @@
 <#-- ========== DMCMM class/helper functions ========== -->
+double DMCMM_ComputeLot(string symbol, long magicNumber) {
+    if(StringLen(symbol) <= 0) {
+        symbol = Symbol();
+    }
+
+    DMCMM_MinLot  = MarketInfo(symbol, MODE_MINLOT);
+    DMCMM_LotStep = MarketInfo(symbol, MODE_LOTSTEP);
+    if(DMCMM_MinLot <= 0.0)  DMCMM_MinLot = 0.01;
+    if(DMCMM_LotStep <= 0.0) DMCMM_LotStep = 0.01;
+
+    if(BaseLot <= 0.0) {
+        Print("[DMCMM] BaseLot must be positive. Using minimal lot size.");
+        double fallback = DMCMM_MinLot;
+        if(fallback <= 0.0) fallback = DMCMM_LotStep;
+        if(fallback <= 0.0) fallback = 0.01;
+        DMCMM_curBet = NormalizeDouble(fallback, Decimals);
+        return DMCMM_curBet;
+    }
+
+    if(!DMCMM_initialized) {
+        DMCMM_ResetCycle();
+        DMCMM_processedOrdersCount = 0;
+        DMCMM_initialized = true;
+    }
+
+    int histTotal = OrdersHistoryTotal();
+    if(histTotal < DMCMM_processedOrdersCount) {
+        DMCMM_processedOrdersCount = 0;
+    }
+
+    int newOrders = histTotal - DMCMM_processedOrdersCount;
+    if(newOrders > 0) {
+        for(int offset = newOrders - 1; offset >= 0; offset--) {
+            int index = offset;
+            if(!OrderSelect(index, SELECT_BY_POS, MODE_HISTORY)) {
+                continue;
+            }
+            if(OrderSymbol() != symbol) {
+                continue;
+            }
+            if((long)OrderMagicNumber() != magicNumber) {
+                continue;
+            }
+
+            double openPrice  = OrderOpenPrice();
+            double closePrice = OrderClosePrice();
+            if(closePrice == openPrice) {
+                continue;
+            }
+
+            int type = OrderType();
+            bool isWin = false;
+            if(type == OP_BUY || type == OP_BUYLIMIT || type == OP_BUYSTOP) {
+                isWin = (closePrice > openPrice);
+            } else if(type == OP_SELL || type == OP_SELLLIMIT || type == OP_SELLSTOP) {
+                isWin = (closePrice < openPrice);
+            } else {
+                isWin = (closePrice > openPrice);
+            }
+
+            double betForTrade = DMCMM_curBet;
+            if(isWin) {
+                DMCMM_cycleProfit += betForTrade;
+                DMCMM_ProcessWin();
+            } else {
+                DMCMM_cycleProfit -= betForTrade;
+                DMCMM_ProcessLoss();
+            }
+
+            if(MaxDrawdown > 0.0 && DMCMM_cycleProfit < -MaxDrawdown) {
+                DMCMM_ResetCycle();
+            } else {
+                DMCMM_UpdateCurrentBet();
+            }
+        }
+        DMCMM_processedOrdersCount = histTotal;
+    }
+
+    double lots = DMCMM_curBet;
+    if(DMCMM_LotStep > 0.0) {
+        double ratio = lots / DMCMM_LotStep;
+        lots = MathFloor(ratio + 1e-8) * DMCMM_LotStep;
+    }
+    lots = NormalizeDouble(lots, Decimals);
+    if(lots < DMCMM_MinLot) {
+        lots = DMCMM_MinLot;
+    }
+    return lots;
+}
+
 void DMCMM_ResetCycle() {
     DMCMM_ResetSequence();
     DMCMM_stock       = 0;
