@@ -31,8 +31,11 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
 
     int newOrders = histTotal - DMCMM_processedOrdersCount;
     if(newOrders > 0) {
-        for(int offset = newOrders - 1; offset >= 0; offset--) {
-            int index = offset;
+        for(int offset = 0; offset < newOrders; offset++) {
+            int index = DMCMM_processedOrdersCount + offset;
+            if(index < 0 || index >= histTotal) {
+                continue;
+            }
             if(!OrderSelect(index, SELECT_BY_POS, MODE_HISTORY)) {
                 continue;
             }
