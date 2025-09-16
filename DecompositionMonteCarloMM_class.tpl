@@ -25,24 +25,56 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
     }
 
     int histTotal = OrdersHistoryTotal();
-    if(histTotal < DMCMM_processedOrdersCount) {
-        DMCMM_processedOrdersCount = 0;
+    datetime orderCloseTimes[];
+    int      orderTickets[];
+    ArrayResize(orderCloseTimes, 0);
+    ArrayResize(orderTickets, 0);
+
+    for(int pos = 0; pos < histTotal; pos++) {
+        if(!OrderSelect(pos, SELECT_BY_POS, MODE_HISTORY)) {
+            continue;
+        }
+        if(OrderSymbol() != symbol) {
+            continue;
+        }
+        if((long)OrderMagicNumber() != magicNumber) {
+            continue;
+        }
+
+        int insertIndex = ArraySize(orderTickets);
+        if(ArrayResize(orderTickets, insertIndex + 1) < 0) {
+            continue;
+        }
+        if(ArrayResize(orderCloseTimes, insertIndex + 1) < 0) {
+            ArrayResize(orderTickets, insertIndex);
+            continue;
+        }
+        orderTickets[insertIndex]    = OrderTicket();
+        orderCloseTimes[insertIndex] = OrderCloseTime();
     }
 
-    int newOrders = histTotal - DMCMM_processedOrdersCount;
-    if(newOrders > 0) {
-        for(int offset = 0; offset < newOrders; offset++) {
-            int index = DMCMM_processedOrdersCount + offset;
-            if(index < 0 || index >= histTotal) {
-                continue;
+    int relevantCount = ArraySize(orderTickets);
+    if(relevantCount < DMCMM_processedOrdersCount) {
+        DMCMM_processedOrdersCount = relevantCount;
+    }
+
+    if(relevantCount > DMCMM_processedOrdersCount) {
+        for(int i = 1; i < relevantCount; i++) {
+            datetime timeKey = orderCloseTimes[i];
+            int      ticketKey = orderTickets[i];
+            int j = i - 1;
+            while(j >= 0 && (orderCloseTimes[j] > timeKey || (orderCloseTimes[j] == timeKey && orderTickets[j] > ticketKey))) {
+                orderCloseTimes[j + 1] = orderCloseTimes[j];
+                orderTickets[j + 1]    = orderTickets[j];
+                j--;
             }
-            if(!OrderSelect(index, SELECT_BY_POS, MODE_HISTORY)) {
-                continue;
-            }
-            if(OrderSymbol() != symbol) {
-                continue;
-            }
-            if((long)OrderMagicNumber() != magicNumber) {
+            orderCloseTimes[j + 1] = timeKey;
+            orderTickets[j + 1]    = ticketKey;
+        }
+
+        for(int idx = DMCMM_processedOrdersCount; idx < relevantCount; idx++) {
+            int ticket = orderTickets[idx];
+            if(!OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY)) {
                 continue;
             }
 
@@ -77,7 +109,7 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
                 DMCMM_UpdateCurrentBet();
             }
         }
-        DMCMM_processedOrdersCount = histTotal;
+        DMCMM_processedOrdersCount = relevantCount;
     }
 
     double lots = DMCMM_curBet;
