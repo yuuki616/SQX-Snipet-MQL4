@@ -1,6 +1,5 @@
 <#-- ========== DMCMM class/helper functions ========== -->
 double DMCMM_CalcDecimalStep();
-double DMCMM_ComputeStepRatio(double decimalStep);
 double DMCMM_RoundLotToBroker(double rawLots);
 
 double DMCMM_ComputeLot(string symbol, long magicNumber) {
@@ -16,8 +15,6 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
     if(DMCMM_LotStep <= 0.0) DMCMM_LotStep = decimalStep;
     if(DMCMM_LotStep <= 0.0) DMCMM_LotStep = DMCMM_MinLot;
     if(DMCMM_LotStep <= 0.0) DMCMM_LotStep = 0.01;
-    DMCMM_stepRatio = DMCMM_ComputeStepRatio(decimalStep);
-
     if(BaseLot <= 0.0) {
         Print("[DMCMM] BaseLot must be positive. Using minimal lot size.");
         double fallback = decimalStep;
@@ -162,23 +159,7 @@ double DMCMM_CalcDecimalStep() {
     return MathPow(10.0, -Decimals);
 }
 
-double DMCMM_ComputeStepRatio(double decimalStep) {
-    double step = DMCMM_LotStep;
-    if(step <= 0.0) {
-        step = decimalStep;
-    }
-    if(step <= 0.0 || decimalStep <= 0.0) {
-        return 1.0;
-    }
-    double ratio = step / decimalStep;
-    if(ratio < 1.0) {
-        ratio = 1.0;
-    }
-    return ratio;
-}
-
 double DMCMM_RoundLotToBroker(double rawLots) {
-    double scaled = rawLots * DMCMM_stepRatio;
     double step = DMCMM_LotStep;
     if(step <= 0.0) {
         step = DMCMM_CalcDecimalStep();
@@ -186,13 +167,15 @@ double DMCMM_RoundLotToBroker(double rawLots) {
     if(step <= 0.0) {
         step = 0.01;
     }
-    double steps = scaled / step;
+
+    double steps = rawLots / step;
     steps = MathFloor(steps + 1e-8);
     if(steps < 0.0) {
         steps = 0.0;
     }
-    scaled = steps * step;
-    scaled = NormalizeDouble(scaled, Decimals);
+
+    double rounded = steps * step;
+    rounded = NormalizeDouble(rounded, Decimals);
 
     double minPositive = step;
     if(minPositive <= 0.0) {
@@ -201,13 +184,13 @@ double DMCMM_RoundLotToBroker(double rawLots) {
     if(minPositive <= 0.0) {
         minPositive = 0.01;
     }
-    if(scaled < minPositive) {
-        scaled = minPositive;
+    if(rounded < minPositive) {
+        rounded = minPositive;
     }
-    if(DMCMM_MinLot > 0.0 && scaled < DMCMM_MinLot) {
-        scaled = DMCMM_MinLot;
+    if(DMCMM_MinLot > 0.0 && rounded < DMCMM_MinLot) {
+        rounded = DMCMM_MinLot;
     }
-    return scaled;
+    return rounded;
 }
 
 void DMCMM_ResetCycle() {
