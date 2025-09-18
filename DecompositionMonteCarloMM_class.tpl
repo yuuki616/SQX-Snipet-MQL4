@@ -1,4 +1,8 @@
 <#-- ========== DMCMM class/helper functions ========== -->
+double DMCMM_CalcDecimalStep();
+double DMCMM_ComputeStepRatio(double decimalStep);
+double DMCMM_RoundLotToBroker(double rawLots);
+
 double DMCMM_ComputeLot(string symbol, long magicNumber) {
     if(StringLen(symbol) <= 0) {
         symbol = Symbol();
@@ -6,16 +10,22 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
 
     DMCMM_MinLot  = MarketInfo(symbol, MODE_MINLOT);
     DMCMM_LotStep = MarketInfo(symbol, MODE_LOTSTEP);
+    double decimalStep = DMCMM_CalcDecimalStep();
+    if(DMCMM_MinLot <= 0.0)  DMCMM_MinLot = decimalStep;
     if(DMCMM_MinLot <= 0.0)  DMCMM_MinLot = 0.01;
+    if(DMCMM_LotStep <= 0.0) DMCMM_LotStep = decimalStep;
+    if(DMCMM_LotStep <= 0.0) DMCMM_LotStep = DMCMM_MinLot;
     if(DMCMM_LotStep <= 0.0) DMCMM_LotStep = 0.01;
+    DMCMM_stepRatio = DMCMM_ComputeStepRatio(decimalStep);
 
     if(BaseLot <= 0.0) {
         Print("[DMCMM] BaseLot must be positive. Using minimal lot size.");
-        double fallback = DMCMM_MinLot;
+        double fallback = decimalStep;
         if(fallback <= 0.0) fallback = DMCMM_LotStep;
         if(fallback <= 0.0) fallback = 0.01;
         DMCMM_curBet = NormalizeDouble(fallback, Decimals);
-        return DMCMM_curBet;
+        DMCMM_lastExecutedBet = DMCMM_curBet;
+        return DMCMM_RoundLotToBroker(DMCMM_curBet);
     }
 
     if(!DMCMM_initialized) {
@@ -110,9 +120,12 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
             isWin = (closePrice > openPrice);
         }
 
-        double betForTrade = OrderLots();
+        double betForTrade = DMCMM_lastExecutedBet;
         if(betForTrade <= 0.0) {
             betForTrade = DMCMM_curBet;
+        }
+        if(betForTrade <= 0.0) {
+            betForTrade = OrderLots();
         }
         if(isWin) {
             DMCMM_cycleProfit += betForTrade;
@@ -137,20 +150,64 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
         DMCMM_processedOrdersCount = relevantCount;
     }
 
-    double lots = DMCMM_curBet;
-    if(DMCMM_LotStep > 0.0) {
-        double ratio = lots / DMCMM_LotStep;
-        double roundedSteps = MathCeil(ratio - 1e-8);
-        if(roundedSteps < 0.0) {
-            roundedSteps = 0.0;
-        }
-        lots = roundedSteps * DMCMM_LotStep;
-    }
-    lots = NormalizeDouble(lots, Decimals);
-    if(lots < DMCMM_MinLot) {
-        lots = DMCMM_MinLot;
-    }
+    DMCMM_lastExecutedBet = DMCMM_curBet;
+    double lots = DMCMM_RoundLotToBroker(DMCMM_curBet);
     return lots;
+}
+
+double DMCMM_CalcDecimalStep() {
+    if(Decimals <= 0) {
+        return 1.0;
+    }
+    return MathPow(10.0, -Decimals);
+}
+
+double DMCMM_ComputeStepRatio(double decimalStep) {
+    double step = DMCMM_LotStep;
+    if(step <= 0.0) {
+        step = decimalStep;
+    }
+    if(step <= 0.0 || decimalStep <= 0.0) {
+        return 1.0;
+    }
+    double ratio = step / decimalStep;
+    if(ratio < 1.0) {
+        ratio = 1.0;
+    }
+    return ratio;
+}
+
+double DMCMM_RoundLotToBroker(double rawLots) {
+    double scaled = rawLots * DMCMM_stepRatio;
+    double step = DMCMM_LotStep;
+    if(step <= 0.0) {
+        step = DMCMM_CalcDecimalStep();
+    }
+    if(step <= 0.0) {
+        step = 0.01;
+    }
+    double steps = scaled / step;
+    steps = MathFloor(steps + 1e-8);
+    if(steps < 0.0) {
+        steps = 0.0;
+    }
+    scaled = steps * step;
+    scaled = NormalizeDouble(scaled, Decimals);
+
+    double minPositive = step;
+    if(minPositive <= 0.0) {
+        minPositive = DMCMM_CalcDecimalStep();
+    }
+    if(minPositive <= 0.0) {
+        minPositive = 0.01;
+    }
+    if(scaled < minPositive) {
+        scaled = minPositive;
+    }
+    if(DMCMM_MinLot > 0.0 && scaled < DMCMM_MinLot) {
+        scaled = DMCMM_MinLot;
+    }
+    return scaled;
 }
 
 void DMCMM_ResetCycle() {
@@ -159,6 +216,7 @@ void DMCMM_ResetCycle() {
     DMCMM_consecWins  = 0;
     DMCMM_cycleProfit = 0.0;
     DMCMM_UpdateCurrentBet();
+    DMCMM_lastExecutedBet = DMCMM_curBet;
 }
 
 void DMCMM_ResetSequence() {
