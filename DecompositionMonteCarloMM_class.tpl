@@ -21,6 +21,8 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
     if(!DMCMM_initialized) {
         DMCMM_ResetCycle();
         DMCMM_processedOrdersCount = 0;
+        DMCMM_lastCloseTime   = 0;
+        DMCMM_lastCloseTicket = -1;
         DMCMM_initialized = true;
     }
 
@@ -37,7 +39,8 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
         if(OrderSymbol() != symbol) {
             continue;
         }
-        if((long)OrderMagicNumber() != magicNumber) {
+        int orderMagic = OrderMagicNumber();
+        if(magicNumber != 0 && (long)orderMagic != magicNumber) {
             continue;
         }
 
@@ -56,9 +59,11 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
     int relevantCount = ArraySize(orderTickets);
     if(relevantCount < DMCMM_processedOrdersCount) {
         DMCMM_processedOrdersCount = relevantCount;
+        DMCMM_lastCloseTime   = 0;
+        DMCMM_lastCloseTicket = -1;
     }
 
-    if(relevantCount > DMCMM_processedOrdersCount) {
+    if(relevantCount > 1) {
         for(int i = 1; i < relevantCount; i++) {
             datetime timeKey = orderCloseTimes[i];
             int      ticketKey = orderTickets[i];
@@ -71,51 +76,75 @@ double DMCMM_ComputeLot(string symbol, long magicNumber) {
             orderCloseTimes[j + 1] = timeKey;
             orderTickets[j + 1]    = ticketKey;
         }
+    }
 
-        for(int idx = DMCMM_processedOrdersCount; idx < relevantCount; idx++) {
-            int ticket = orderTickets[idx];
-            if(!OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY)) {
-                continue;
-            }
-
-            double openPrice  = OrderOpenPrice();
-            double closePrice = OrderClosePrice();
-            if(closePrice == openPrice) {
-                continue;
-            }
-
-            int type = OrderType();
-            bool isWin = false;
-            if(type == OP_BUY || type == OP_BUYLIMIT || type == OP_BUYSTOP) {
-                isWin = (closePrice > openPrice);
-            } else if(type == OP_SELL || type == OP_SELLLIMIT || type == OP_SELLSTOP) {
-                isWin = (closePrice < openPrice);
-            } else {
-                isWin = (closePrice > openPrice);
-            }
-
-            double betForTrade = DMCMM_curBet;
-            if(isWin) {
-                DMCMM_cycleProfit += betForTrade;
-                DMCMM_ProcessWin();
-            } else {
-                DMCMM_cycleProfit -= betForTrade;
-                DMCMM_ProcessLoss();
-            }
-
-            if(MaxDrawdown > 0.0 && DMCMM_cycleProfit < -MaxDrawdown) {
-                DMCMM_ResetCycle();
-            } else {
-                DMCMM_UpdateCurrentBet();
-            }
+    bool processedAny = false;
+    for(int idx = 0; idx < relevantCount; idx++) {
+        int ticket = orderTickets[idx];
+        datetime closeTime = orderCloseTimes[idx];
+        if(closeTime < DMCMM_lastCloseTime) {
+            continue;
         }
+        if(closeTime == DMCMM_lastCloseTime && ticket <= DMCMM_lastCloseTicket) {
+            continue;
+        }
+        if(!OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY)) {
+            continue;
+        }
+
+        double openPrice  = OrderOpenPrice();
+        double closePrice = OrderClosePrice();
+        if(closePrice == openPrice) {
+            DMCMM_lastCloseTime   = closeTime;
+            DMCMM_lastCloseTicket = ticket;
+            continue;
+        }
+
+        int type = OrderType();
+        bool isWin = false;
+        if(type == OP_BUY || type == OP_BUYLIMIT || type == OP_BUYSTOP) {
+            isWin = (closePrice > openPrice);
+        } else if(type == OP_SELL || type == OP_SELLLIMIT || type == OP_SELLSTOP) {
+            isWin = (closePrice < openPrice);
+        } else {
+            isWin = (closePrice > openPrice);
+        }
+
+        double betForTrade = OrderLots();
+        if(betForTrade <= 0.0) {
+            betForTrade = DMCMM_curBet;
+        }
+        if(isWin) {
+            DMCMM_cycleProfit += betForTrade;
+            DMCMM_ProcessWin();
+        } else {
+            DMCMM_cycleProfit -= betForTrade;
+            DMCMM_ProcessLoss();
+        }
+
+        if(MaxDrawdown > 0.0 && DMCMM_cycleProfit < -MaxDrawdown) {
+            DMCMM_ResetCycle();
+        } else {
+            DMCMM_UpdateCurrentBet();
+        }
+
+        DMCMM_lastCloseTime   = closeTime;
+        DMCMM_lastCloseTicket = ticket;
+        processedAny = true;
+    }
+
+    if(processedAny || DMCMM_processedOrdersCount != relevantCount) {
         DMCMM_processedOrdersCount = relevantCount;
     }
 
     double lots = DMCMM_curBet;
     if(DMCMM_LotStep > 0.0) {
         double ratio = lots / DMCMM_LotStep;
-        lots = MathFloor(ratio + 1e-8) * DMCMM_LotStep;
+        double roundedSteps = MathCeil(ratio - 1e-8);
+        if(roundedSteps < 0.0) {
+            roundedSteps = 0.0;
+        }
+        lots = roundedSteps * DMCMM_LotStep;
     }
     lots = NormalizeDouble(lots, Decimals);
     if(lots < DMCMM_MinLot) {
